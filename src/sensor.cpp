@@ -13,7 +13,6 @@ SensorData LSM6DS3Sensor::read() {
     data.gyro_x = imu.readFloatAccelX();
     data.gyro_y = imu.readFloatAccelY();
     data.gyro_z = imu.readFloatAccelZ();
-    data.time = millis();
     return data;
 }
 

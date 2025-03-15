@@ -4,6 +4,21 @@
 #include "sensor.h"
 #include "communication.h"
 #include <esp_now.h>
+#include <Hashtable.h>
+// Функция хеширования для MAC-адресов
+struct MacHash {
+  uint32_t operator()(const uint8_t* mac) const {
+      uint32_t hash = 5381; // Базовое значение
+      for (int i = 0; i < 6; i++) {
+          hash = ((hash << 5) + hash) + mac[i]; // hash * 33 + mac[i]
+      }
+      return hash;
+  }
+};
+
+// Определяем хеш-таблицу для MAC-адресов
+Hashtable<const uint8_t*, uint8_t, MacHash> macToIdx;
+uint8_t macAP[6];
 
 // Глобальные переменные
 Sensor *sensor;
@@ -14,7 +29,7 @@ WebServer server(80);
 // Функция регистрации устройств
 void registerDevice(uint8_t *mac)
 {
-  static uint8_t nextID = 0;
+  static uint8_t nextID = 1;
   if (nextID >= 10)
   {
     Serial.println("Maximum number of devices reached");
@@ -30,8 +45,7 @@ void registerDevice(uint8_t *mac)
       Serial.print(":");
   }
   Serial.println();
-
-  esp_now_send(mac, &assignedID, sizeof(assignedID));
+  macToIdx.put(*mac, assignedID);
 }
 
 // Callback для приема данных через ESP-NOW
@@ -41,15 +55,17 @@ void onDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len)
   {
     SensorData data;
     memcpy(&data, incomingData, sizeof(SensorData));
-
-    if (data.id == 0xFF)
+    data.id = *mac;
+    data.time = millis();
+    uint8_t *value = macToIdx.get(*mac);
+    if (value != nullptr)
     {
       registerDevice((uint8_t *)mac);
     }
-    else if (data.id < 10)
+    else if (*value < 10)
     {
-      receivedData[data.id] = data;
-      Serial.printf("Data received from device ID %d\n", data.id);
+      receivedData[*value] = data;
+      Serial.printf("Data received from device ID %d\n", *value);
     }
   }
 }
@@ -62,11 +78,11 @@ void sensorTask(void *parameter)
     SensorData data = sensor->read();
     if (isAPMode)
     {
+      data.id = *macAP;
       receivedData[0] = data;
     }
     else
     {
-      data.id = 0xFF; // По умолчанию ID не назначен
       sendData(data); // Отправка данных через ESP-NOW
     }
     vTaskDelay(pdMS_TO_TICKS(10)); // Задержка 100 мс
@@ -90,7 +106,7 @@ void setupHTTPServer()
             {
         String response = "{";
         for (int i = 0; i < 10; i++) {
-            if (receivedData[i].id != 0xFF) {
+            if (millis() - receivedData[i].time > 200) {
                 response += "\"d" + String(i) + "\":{";
                 response += "\"ax\":" + String(receivedData[i].accel_x) + ",";
                 response += "\"ay\":" + String(receivedData[i].accel_y) + ",";
@@ -152,6 +168,7 @@ void setup()
     WiFi.mode(WIFI_AP);
     WiFi.softAP("ESP32_AP", "12345678");
     isAPMode = true;
+    WiFi.softAPmacAddress(macAP);
   }
 
   // Настройка ESP-NOW
