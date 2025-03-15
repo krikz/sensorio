@@ -6,18 +6,21 @@
 #include <esp_now.h>
 #include <Hashtable.h>
 // Функция хеширования для MAC-адресов
-struct MacHash {
-  uint32_t operator()(const uint8_t* mac) const {
-      uint32_t hash = 5381; // Базовое значение
-      for (int i = 0; i < 6; i++) {
-          hash = ((hash << 5) + hash) + mac[i]; // hash * 33 + mac[i]
-      }
-      return hash;
+struct MacHash
+{
+  uint32_t operator()(const uint8_t *mac) const
+  {
+    uint32_t hash = 5381; // Базовое значение
+    for (int i = 0; i < 6; i++)
+    {
+      hash = ((hash << 5) + hash) + mac[i]; // hash * 33 + mac[i]
+    }
+    return hash;
   }
 };
 
 // Определяем хеш-таблицу для MAC-адресов
-Hashtable<const uint8_t*, uint8_t, MacHash> macToIdx;
+Hashtable<const uint8_t *, uint8_t, MacHash> macToIdx;
 uint8_t macAP[6];
 
 // Глобальные переменные
@@ -27,7 +30,7 @@ SensorData receivedData[10];
 WebServer server(80);
 
 // Функция регистрации устройств
-void registerDevice(uint8_t *mac)
+void registerDevice(const uint8_t *mac)
 {
   static uint8_t nextID = 1;
   if (nextID >= 10)
@@ -45,7 +48,9 @@ void registerDevice(uint8_t *mac)
       Serial.print(":");
   }
   Serial.println();
-  macToIdx.put(*mac, assignedID);
+
+  // Добавляем MAC-адрес в хеш-таблицу
+  macToIdx.put(mac, assignedID);
 }
 
 // Callback для приема данных через ESP-NOW
@@ -55,15 +60,19 @@ void onDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len)
   {
     SensorData data;
     memcpy(&data, incomingData, sizeof(SensorData));
-    data.id = *mac;
-    data.time = millis();
-    uint8_t *value = macToIdx.get(*mac);
-    if (value != nullptr)
+
+    // Проверяем, зарегистрирован ли MAC-адрес
+    uint8_t *value = macToIdx.get(mac);
+    if (value == nullptr)
     {
-      registerDevice((uint8_t *)mac);
+      // Если MAC-адрес не зарегистрирован, регистрируем устройство
+      registerDevice(mac);
     }
-    else if (*value < 10)
+    else
     {
+      // Если MAC-адрес зарегистрирован, сохраняем данные
+      data.id = *value;
+      data.time = millis();
       receivedData[*value] = data;
       Serial.printf("Data received from device ID %d\n", *value);
     }
@@ -78,14 +87,15 @@ void sensorTask(void *parameter)
     SensorData data = sensor->read();
     if (isAPMode)
     {
-      data.id = *macAP;
+      data.id = 0; // Главное устройство имеет ID = 0
+      data.time = millis();
       receivedData[0] = data;
     }
     else
     {
       sendData(data); // Отправка данных через ESP-NOW
     }
-    vTaskDelay(pdMS_TO_TICKS(10)); // Задержка 100 мс
+    vTaskDelay(pdMS_TO_TICKS(100)); // Задержка 100 мс
   }
 }
 
@@ -104,25 +114,25 @@ void setupHTTPServer()
 {
   server.on("/", []()
             {
-        String response = "{";
-        for (int i = 0; i < 10; i++) {
-            if (millis() - receivedData[i].time > 200) {
-                response += "\"d" + String(i) + "\":{";
-                response += "\"ax\":" + String(receivedData[i].accel_x) + ",";
-                response += "\"ay\":" + String(receivedData[i].accel_y) + ",";
-                response += "\"az\":" + String(receivedData[i].accel_z) + ",";
-                response += "\"gx\":" + String(receivedData[i].gyro_x) + ",";
-                response += "\"gy\":" + String(receivedData[i].gyro_y) + ",";
-                response += "\"gz\":" + String(receivedData[i].gyro_z)+ ",";
-                response += "\"t\":" + String(receivedData[i].time);
-                response += "},";
-            }
-        }
-        if (response.endsWith(",")) {
-            response.remove(response.length() - 1);
-        }
-        response += "}";
-        server.send(200, "application/json", response); });
+      String response = "{";
+      for (int i = 0; i < 10; i++) {
+          if (millis() - receivedData[i].time <= 200) { // Проверяем актуальность данных
+              response += "\"d" + String(i) + "\":{";
+              response += "\"ax\":" + String(receivedData[i].accel_x) + ",";
+              response += "\"ay\":" + String(receivedData[i].accel_y) + ",";
+              response += "\"az\":" + String(receivedData[i].accel_z) + ",";
+              response += "\"gx\":" + String(receivedData[i].gyro_x) + ",";
+              response += "\"gy\":" + String(receivedData[i].gyro_y) + ",";
+              response += "\"gz\":" + String(receivedData[i].gyro_z) + ",";
+              response += "\"t\":" + String(receivedData[i].time);
+              response += "},";
+          }
+      }
+      if (response.endsWith(",")) {
+          response.remove(response.length() - 1);
+      }
+      response += "}";
+      server.send(200, "application/json", response); });
   server.begin();
   Serial.println("HTTP server started");
 }
