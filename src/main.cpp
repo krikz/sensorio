@@ -91,13 +91,14 @@ void setupHTTPServer()
         String response = "{";
         for (int i = 0; i < 10; i++) {
             if (receivedData[i].id != 0xFF) {
-                response += "\"d_" + String(i) + "\":{";
-                response += "\"a_x\":" + String(receivedData[i].accel_x) + ",";
-                response += "\"a_y\":" + String(receivedData[i].accel_y) + ",";
-                response += "\"a_z\":" + String(receivedData[i].accel_z) + ",";
-                response += "\"g_x\":" + String(receivedData[i].gyro_x) + ",";
-                response += "\"g_y\":" + String(receivedData[i].gyro_y) + ",";
-                response += "\"g_z\":" + String(receivedData[i].gyro_z);
+                response += "\"d" + String(i) + "\":{";
+                response += "\"ax\":" + String(receivedData[i].accel_x) + ",";
+                response += "\"ay\":" + String(receivedData[i].accel_y) + ",";
+                response += "\"az\":" + String(receivedData[i].accel_z) + ",";
+                response += "\"gx\":" + String(receivedData[i].gyro_x) + ",";
+                response += "\"gy\":" + String(receivedData[i].gyro_y) + ",";
+                response += "\"gz\":" + String(receivedData[i].gyro_z)+ ",";
+                response += "\"t\":" + String(receivedData[i].time);
                 response += "},";
             }
         }
@@ -120,13 +121,19 @@ void setup()
 #else
   sensor = new LSM6DS3Sensor();
 #endif
-
-  if (!sensor->begin())
+  status_t status = sensor->begin();
+  if (status != IMU_SUCCESS)
   {
     Serial.println("Failed to initialize sensor");
+    Serial.println(status);
     while (1)
     {
     }
+  }
+
+  for (size_t i = 0; i < 10; i++)
+  {
+    receivedData[i].id = 0xFF;
   }
 
   // Настройка Wi-Fi

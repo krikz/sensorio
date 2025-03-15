@@ -1,8 +1,8 @@
 #include "sensor.h"
 #include <Wire.h>
 
-bool LSM6DS3Sensor::begin() {
-    return Wire.setPins(8, 9) && imu.begin(); // Инициализация через I2C
+status_t LSM6DS3Sensor::begin() {
+    return imu.begin(); // Инициализация через I2C
 }
 
 SensorData LSM6DS3Sensor::read() {
@@ -13,7 +13,7 @@ SensorData LSM6DS3Sensor::read() {
     data.gyro_x = imu.readFloatAccelX();
     data.gyro_y = imu.readFloatAccelY();
     data.gyro_z = imu.readFloatAccelZ();
-
+    data.time = millis();
     return data;
 }
 
