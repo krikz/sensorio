@@ -5,6 +5,7 @@
 #include "communication.h"
 #include <esp_now.h>
 #include <Hashtable.h>
+#include "embedded_resources.h" // Включаем заголовочный файл с встроенными ресурсами
 // Функция хеширования для MAC-адресов
 struct MacHash
 {
@@ -109,10 +110,37 @@ void httpTask(void *parameter)
     vTaskDelay(pdMS_TO_TICKS(10)); // Задержка 10 мс
   }
 }
+// Функция для отправки ресурсов из PROGMEM
+void sendResource(AsyncWebServerRequest *request, const uint8_t *data, size_t length, const char *contentType)
+{
+  AsyncWebServerResponse *response = request->beginResponse_P(200, contentType, data, length);
+  response->addHeader("Cache-Control", "max-age=3600"); // Кэширование на 1 час
+  request->send(response);
+}
 
+// Словарь ресурсов
+const struct Resource
+{
+  const char *path;        // Путь к файлу
+  const uint8_t *data;     // Указатель на данные в PROGMEM
+  size_t length;           // Длина данных
+  const char *contentType; // Тип контента
+} resources[] = {
+    {"/", indexHtml, indexHtml_len, "text/html"},
+    {"/logo.svg", logoSvg, logoSvg_len, "image/svg+xml"},
+    {"/favicon.ico", faviconIco, faviconIco_len, "image/x-icon"},
+    {"/styles.css", stylesCss, stylesCss_len, "text/css"},
+    {"/three.module.min.js", threeModuleMinJs, threeModuleMinJs_len, "application/javascript"},
+    {"/three.core.min.js", threeCoreMinJs, threeCoreMinJs_len, "application/javascript"}};
 // Настройка HTTP-сервера
 void setupHTTPServer()
 {
+  // Регистрация обработчиков для каждого ресурса
+  for (const auto &resource : resources)
+  {
+    server.on(resource.path, HTTP_GET, [resource](AsyncWebServerRequest *request)
+              { sendResource(request, resource.data, resource.length, resource.contentType); });
+  }
   server.on("/", []()
             {
       String response = "{";
