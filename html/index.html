@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ESP32 Motion Capture</title>
+    <link rel="icon" href="favicon.ico" type="image/x-icon" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header>
+      <img src="logo.svg" alt="Logo" class="logo" />
+      <h1>ESP32 Motion Capture</h1>
+    </header>
+    <main>
+      <button id="streamButton">Start Streaming</button>
+      <div id="canvas-container"></div>
+    </main>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "three.module.min.js",
+          "three/addons/": "./jsm/"
+        }
+      }
+    </script>
+
+    <script type="module">
+      import * as THREE from "three";
+      let socket;
+      let isStreaming = false;
+
+      // Three.js setup
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(
+        75,
+        window.innerWidth / window.innerHeight,
+        0.1,
+        1000
+      );
+      const renderer = new THREE.WebGLRenderer();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      document
+        .getElementById("canvas-container")
+        .appendChild(renderer.domElement);
+
+      // Add a simple skeleton
+      const bones = [];
+      const boneLength = 1;
+
+      function createBone(x, y, z) {
+        const geometry = new THREE.BoxGeometry(boneLength, 0.1, 0.1);
+        const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+        const bone = new THREE.Mesh(geometry, material);
+        bone.position.set(x, y, z);
+        scene.add(bone);
+        return bone;
+      }
+
+      bones.push(createBone(0, 0, 0)); // Torso
+      bones.push(createBone(0, -boneLength, 0)); // Left arm
+      bones.push(createBone(0, boneLength, 0)); // Right arm
+      bones.push(createBone(-boneLength, 0, 0)); // Left leg
+      bones.push(createBone(boneLength, 0, 0)); // Right leg
+
+      camera.position.z = 5;
+
+      function animate() {
+        requestAnimationFrame(animate);
+        renderer.render(scene, camera);
+      }
+      animate();
+
+      // WebSocket logic
+      function toggleStream() {
+        const button = document.getElementById("streamButton");
+        if (!isStreaming) {
+          fetch("/start").then(() => {
+            socket = new WebSocket(`ws://${window.location.host}/ws`);
+            socket.binaryType = "arraybuffer";
+            socket.onmessage = (event) => {
+              const buffer = event.data;
+              const view = new DataView(buffer);
+
+              const id = view.getUint8(0);
+              const time = view.getUint32(1, true); // Little-endian
+              const accel_x = view.getFloat32(5, true);
+              const accel_y = view.getFloat32(9, true);
+              const accel_z = view.getFloat32(13, true);
+              const gyro_x = view.getFloat32(17, true);
+              const gyro_y = view.getFloat32(21, true);
+              const gyro_z = view.getFloat32(25, true);
+
+              // Update bone orientation based on gyroscope data
+              if (id < bones.length) {
+                bones[id].rotation.x += gyro_x * 0.01;
+                bones[id].rotation.y += gyro_y * 0.01;
+                bones[id].rotation.z += gyro_z * 0.01;
+              }
+            };
+            socket.onopen = () => {
+              console.log("WebSocket connection opened");
+              isStreaming = true;
+              button.textContent = "Stop Streaming";
+            };
+            socket.onclose = () => {
+              console.log("WebSocket connection closed");
+            };
+          });
+        } else {
+          fetch("/stop").then(() => {
+            if (socket) {
+              socket.close();
+              socket = null;
+            }
+            isStreaming = false;
+            button.textContent = "Start Streaming";
+          });
+        }
+      }
+
+      // Attach event listener to the button
+      document
+        .getElementById("streamButton")
+        .addEventListener("click", toggleStream);
+    </script>
+  </body>
+</html>

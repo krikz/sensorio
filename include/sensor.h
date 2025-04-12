@@ -14,6 +14,7 @@ typedef struct
     float gyro_z;
     uint8_t id;
     ulong time;
+    ulong dtime;
 } SensorData;
 
 class Sensor

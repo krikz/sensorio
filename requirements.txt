@@ -1,0 +1,5 @@
+qrcode[pil]
+numpy
+htmlmin
+jsmin
+csscompressor

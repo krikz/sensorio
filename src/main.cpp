@@ -72,7 +72,7 @@ void onDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len)
     {
       // Если MAC-адрес зарегистрирован, сохраняем данные
       data.id = *value;
-      data.time = millis();
+      data.time = micros();
       receivedData[*value] = data;
       Serial.printf("Data received from device ID %d\n", *value);
     }
@@ -88,14 +88,15 @@ void sensorTask(void *parameter)
     if (isAPMode)
     {
       data.id = 0; // Главное устройство имеет ID = 0
-      data.time = millis();
+      data.dtime = micros();
+      data.time = micros();
       receivedData[0] = data;
     }
     else
     {
       sendData(data); // Отправка данных через ESP-NOW
     }
-    vTaskDelay(pdMS_TO_TICKS(100)); // Задержка 100 мс
+    vTaskDelay(pdMS_TO_TICKS(10)); // Задержка 10 мс
   }
 }
 
@@ -124,6 +125,7 @@ void setupHTTPServer()
               response += "\"gx\":" + String(receivedData[i].gyro_x) + ",";
               response += "\"gy\":" + String(receivedData[i].gyro_y) + ",";
               response += "\"gz\":" + String(receivedData[i].gyro_z) + ",";
+              response += "\"dt\":" + String(receivedData[i].dtime) + ",";
               response += "\"t\":" + String(receivedData[i].time);
               response += "},";
           }
@@ -157,14 +159,9 @@ void setup()
     }
   }
 
-  for (size_t i = 0; i < 10; i++)
-  {
-    receivedData[i].id = 0xFF;
-  }
-
   // Настройка Wi-Fi
   WiFi.mode(WIFI_STA);
-  WiFi.begin("ESP32_AP", "12345678");
+  WiFi.begin("SENSORIO", "12345678");
   int attempts = 0;
   while (WiFi.status() != WL_CONNECTED && attempts < 10)
   {
@@ -176,7 +173,7 @@ void setup()
   if (WiFi.status() != WL_CONNECTED)
   {
     WiFi.mode(WIFI_AP);
-    WiFi.softAP("ESP32_AP", "12345678");
+    WiFi.softAP("SENSORIO", "12345678");
     isAPMode = true;
     WiFi.softAPmacAddress(macAP);
   }
