@@ -1,122 +1,145 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SENSORIO</title>
-    <link rel="icon" href="favicon.ico" type="image/x-icon" />
-    <link rel="stylesheet" href="styles.css" />
-  </head>
-  <body>
-    <header>
-      <img src="logo.svg" alt="Logo" class="logo" />
-      <h1>SENSORIO</h1>
-    </header>
-    <main>
-      <button id="streamButton">Start Streaming</button>
-      <div id="canvas-container"></div>
-    </main>
-    <script type="importmap">
-      {
-        "imports": {
-          "three": "/three.module.min.js",
-          "three/addons/": "./jsm/"
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SENSORIO</title>
+  <link rel="icon" href="favicon.ico" type="image/x-icon" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header>
+    <img src="logo.svg" alt="Logo" class="logo" />
+    <h1>SENSORIO</h1>
+  </header>
+  <main>
+    <button id="streamButton">Start Streaming</button>
+    <div id="canvas-container"></div>
+  </main>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "/three.module.min.js",
+        "three/addons/": "./jsm/"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from "three";
+    import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+    let isStreaming = false;
+    let intervalId;
+
+    // Three.js setup
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(
+      75,
+      window.innerWidth / window.innerHeight,
+      0.1,
+      1000
+    );
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.getElementById("canvas-container").appendChild(renderer.domElement);
+
+    // Add OrbitControls for camera rotation
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true; // Smooth movement
+    controls.dampingFactor = 0.05;
+    controls.screenSpacePanning = false;
+    controls.minDistance = 5;
+    controls.maxDistance = 20;
+    controls.target.set(0, 0, 0); // Center of the skeleton
+
+    // Create bones
+    const boneLength = 1;
+    const bones = [];
+    const jointPositions = []; // To store positions of joints
+
+    function createBone(x, y, z) {
+      const geometry = new THREE.BoxGeometry(boneLength, 0.1, 0.1);
+      const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+      const bone = new THREE.Mesh(geometry, material);
+      bone.position.set(x, y, z);
+      scene.add(bone);
+      return bone;
+    }
+
+    // Create three connected bones
+    bones.push(createBone(0, 0, 0)); // First bone starts at origin
+    jointPositions.push(new THREE.Vector3(0, 0, 0));
+
+    bones.push(createBone(0, -boneLength, 0)); // Second bone starts at the end of the first
+    jointPositions.push(new THREE.Vector3(0, -boneLength, 0));
+
+    bones.push(createBone(0, -2 * boneLength, 0)); // Third bone starts at the end of the second
+    jointPositions.push(new THREE.Vector3(0, -2 * boneLength, 0));
+
+    camera.position.set(0, 0, 10); // Position the camera to see the entire skeleton
+
+    // Animation loop
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update(); // Update OrbitControls
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    // Function to fetch data periodically
+    async function fetchData() {
+      try {
+        const response = await fetch("/data");
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
         }
-      }
-    </script>
+        const data = await response.json();
 
-    <script type="module">
-      import * as THREE from "three";
+        // Update bone orientations based on gyroscope data
+        for (const [key, device] of Object.entries(data)) {
+          const id = parseInt(key.slice(1), 10); // Extract ID from key (e.g., "d0" -> 0)
+          if (id < bones.length) {
+            // Convert gyro data to radians for rotation
+            const rotationX = THREE.MathUtils.degToRad(device.gx);
+            const rotationY = THREE.MathUtils.degToRad(device.gy);
+            const rotationZ = THREE.MathUtils.degToRad(device.gz);
 
-      let isStreaming = false;
-      let intervalId;
+            // Apply rotation to the bone
+            bones[id].rotation.set(rotationX, rotationY, rotationZ);
 
-      // Three.js setup
-      const scene = new THREE.Scene();
-      const camera = new THREE.PerspectiveCamera(
-        75,
-        window.innerWidth / window.innerHeight,
-        0.1,
-        1000
-      );
-      const renderer = new THREE.WebGLRenderer();
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      document
-        .getElementById("canvas-container")
-        .appendChild(renderer.domElement);
-
-      // Add a simple skeleton
-      const bones = [];
-      const boneLength = 1;
-
-      function createBone(x, y, z) {
-        const geometry = new THREE.BoxGeometry(boneLength, 0.1, 0.1);
-        const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
-        const bone = new THREE.Mesh(geometry, material);
-        bone.position.set(x, y, z);
-        scene.add(bone);
-        return bone;
-      }
-
-      bones.push(createBone(0, 0, 0)); // Torso
-      bones.push(createBone(0, -boneLength, 0)); // Left arm
-      bones.push(createBone(0, boneLength, 0)); // Right arm
-      bones.push(createBone(-boneLength, 0, 0)); // Left leg
-      bones.push(createBone(boneLength, 0, 0)); // Right leg
-
-      camera.position.z = 5;
-
-      function animate() {
-        requestAnimationFrame(animate);
-        renderer.render(scene, camera);
-      }
-      animate();
-
-      // Function to fetch data periodically
-      async function fetchData() {
-        try {
-          const response = await fetch("/data");
-          if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-          }
-          const data = await response.json();
-
-          // Update bone orientation based on gyroscope data
-          for (const [key, device] of Object.entries(data)) {
-            const id = parseInt(key.slice(1), 10); // Extract ID from key (e.g., "d0" -> 0)
-            if (id < bones.length) {
-              bones[id].rotation.x = +device.gx;
-              bones[id].rotation.y = +device.gy;
-              bones[id].rotation.z = +device.gz;
+            // Update the position of the next bone's starting point
+            if (id < bones.length - 1) {
+              const nextBonePosition = bones[id].localToWorld(new THREE.Vector3(0, -boneLength, 0));
+              bones[id + 1].position.copy(nextBonePosition);
             }
           }
-        } catch (error) {
-          console.error("Error fetching data:", error);
         }
+      } catch (error) {
+        console.error("Error fetching data:", error);
       }
+    }
 
-      // Start or stop streaming
-      function toggleStream() {
-        const button = document.getElementById("streamButton");
-        if (!isStreaming) {
-          fetch("/start").then(() => {
-            intervalId = setInterval(fetchData, 100); // Fetch data every 100ms
-            isStreaming = true;
-            button.textContent = "Stop Streaming";
-          });
-        } else {
-          fetch("/stop").then(() => {
-            clearInterval(intervalId);
-            isStreaming = false;
-            button.textContent = "Start Streaming";
-          });
-        }
+    // Start or stop streaming
+    function toggleStream() {
+      const button = document.getElementById("streamButton");
+      if (!isStreaming) {
+        fetch("/start").then(() => {
+          intervalId = setInterval(fetchData, 100); // Fetch data every 100ms
+          isStreaming = true;
+          button.textContent = "Stop Streaming";
+        });
+      } else {
+        fetch("/stop").then(() => {
+          clearInterval(intervalId);
+          isStreaming = false;
+          button.textContent = "Start Streaming";
+        });
       }
+    }
 
-      // Attach event listener to the button
-      document
-        .getElementById("streamButton")
-        .addEventListener("click", toggleStream);
-    </script>
-  </body>
+    // Attach event listener to the button
+    document.getElementById("streamButton").addEventListener("click", toggleStream);
+  </script>
+</body>
 </html>
