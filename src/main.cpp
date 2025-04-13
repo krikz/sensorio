@@ -6,7 +6,6 @@
 #include <esp_now.h>
 #include <Hashtable.h>
 #include "embedded_resources.h" // Включаем заголовочный файл с встроенными ресурсами
-#include <ESPAsyncWebServer.h>
 // Функция хеширования для MAC-адресов
 struct MacHash
 {
@@ -111,13 +110,6 @@ void httpTask(void *parameter)
     vTaskDelay(pdMS_TO_TICKS(10)); // Задержка 10 мс
   }
 }
-// Функция для отправки ресурсов из PROGMEM
-void sendResource(AsyncWebServerRequest *request, const uint8_t *data, size_t length, const char *contentType)
-{
-  AsyncWebServerResponse *response = request->beginResponse_P(200, contentType, data, length);
-  response->addHeader("Cache-Control", "max-age=3600"); // Кэширование на 1 час
-  request->send(response);
-}
 
 // Словарь ресурсов
 const struct Resource
@@ -131,36 +123,39 @@ const struct Resource
     {"/logo.svg", logoSvg, logoSvg_len, "image/svg+xml"},
     {"/favicon.ico", faviconIco, faviconIco_len, "image/x-icon"},
     {"/styles.css", stylesCss, stylesCss_len, "text/css"},
-    {"/three.module.min.js", threeModuleMinJs, threeModuleMinJs_len, "application/javascript"},
-    {"/three.core.min.js", threeCoreMinJs, threeCoreMinJs_len, "application/javascript"}};
+    {"/three.module.min.js", threeModuleMinJs, threeModuleMinJs_len, "application/javascript"}};
+    //{"/three.core.min.js", threeCoreMinJs, threeCoreMinJs_len, "application/javascript"}};
 // Настройка HTTP-сервера
 void setupHTTPServer()
 {
   // Регистрация обработчиков для каждого ресурса
   for (const auto &resource : resources)
   {
-    server.on(resource.path, HTTP_GET, [resource](AsyncWebServerRequest *request)
-              { sendResource(request, resource.data, resource.length, resource.contentType); });
+    server.on(Uri(resource.path), HTTP_GET, [resource]()
+              { server.send_P(200, resource.contentType, reinterpret_cast<const char *>(resource.data), resource.length); });
   }
   server.on("/", []()
             {
       String response = "{";
-      for (int i = 0; i < 10; i++) {
-          if (millis() - receivedData[i].time <= 200) { // Проверяем актуальность данных
-              response += "\"d" + String(i) + "\":{";
-              response += "\"ax\":" + String(receivedData[i].accel_x) + ",";
-              response += "\"ay\":" + String(receivedData[i].accel_y) + ",";
-              response += "\"az\":" + String(receivedData[i].accel_z) + ",";
-              response += "\"gx\":" + String(receivedData[i].gyro_x) + ",";
-              response += "\"gy\":" + String(receivedData[i].gyro_y) + ",";
-              response += "\"gz\":" + String(receivedData[i].gyro_z) + ",";
-              response += "\"dt\":" + String(receivedData[i].dtime) + ",";
-              response += "\"t\":" + String(receivedData[i].time);
-              response += "},";
-          }
+      for (int i = 0; i < 10; i++)
+      {
+        if (millis() - receivedData[i].time <= 200)
+        { // Проверяем актуальность данных
+          response += "\"d" + String(i) + "\":{";
+          response += "\"ax\":" + String(receivedData[i].accel_x) + ",";
+          response += "\"ay\":" + String(receivedData[i].accel_y) + ",";
+          response += "\"az\":" + String(receivedData[i].accel_z) + ",";
+          response += "\"gx\":" + String(receivedData[i].gyro_x) + ",";
+          response += "\"gy\":" + String(receivedData[i].gyro_y) + ",";
+          response += "\"gz\":" + String(receivedData[i].gyro_z) + ",";
+          response += "\"dt\":" + String(receivedData[i].dtime) + ",";
+          response += "\"t\":" + String(receivedData[i].time);
+          response += "},";
+        }
       }
-      if (response.endsWith(",")) {
-          response.remove(response.length() - 1);
+      if (response.endsWith(","))
+      {
+        response.remove(response.length() - 1);
       }
       response += "}";
       server.send(200, "application/json", response); });
