@@ -6,6 +6,7 @@
 #include <esp_now.h>
 #include <Hashtable.h>
 #include "embedded_resources.h" // Включаем заголовочный файл с встроенными ресурсами
+#include <ESPAsyncWebServer.h>
 // Функция хеширования для MAC-адресов
 struct MacHash
 {
