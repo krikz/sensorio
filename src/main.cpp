@@ -140,7 +140,7 @@ void setupHTTPServer()
       String response = "{";
       for (int i = 0; i < 10; i++)
       {
-        if (millis() - receivedData[i].time <= 200)
+        if ( receivedData[i].time >0)
         { // Проверяем актуальность данных
           response += "\"d" + String(i) + "\":{";
           response += "\"ax\":" + String(receivedData[i].accel_x) + ",";

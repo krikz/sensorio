@@ -85,9 +85,9 @@
           for (const [key, device] of Object.entries(data)) {
             const id = parseInt(key.slice(1), 10); // Extract ID from key (e.g., "d0" -> 0)
             if (id < bones.length) {
-              bones[id].rotation.x += device.gx * 0.01;
-              bones[id].rotation.y += device.gy * 0.01;
-              bones[id].rotation.z += device.gz * 0.01;
+              bones[id].rotation.x = +device.gx;
+              bones[id].rotation.y = +device.gy;
+              bones[id].rotation.z = +device.gz;
             }
           }
         } catch (error) {
