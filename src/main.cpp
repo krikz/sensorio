@@ -123,8 +123,8 @@ const struct Resource
     {"/logo.svg", logoSvg, logoSvg_len, "image/svg+xml"},
     {"/favicon.ico", faviconIco, faviconIco_len, "image/x-icon"},
     {"/styles.css", stylesCss, stylesCss_len, "text/css"},
-    {"/three.module.min.js", threeModuleMinJs, threeModuleMinJs_len, "application/javascript"}};
-    //{"/three.core.min.js", threeCoreMinJs, threeCoreMinJs_len, "application/javascript"}};
+    {"/three.module.min.js", threeModuleMinJs, threeModuleMinJs_len, "application/javascript"},
+    {"/three.core.min.js", threeCoreMinJs, threeCoreMinJs_len, "application/javascript"}};
 // Настройка HTTP-сервера
 void setupHTTPServer()
 {

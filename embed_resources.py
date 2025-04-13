@@ -58,7 +58,7 @@ def process_resources(resource_dir, output_file):
         "favicon.ico": "faviconIco",
         "styles.css": "stylesCss",
         "three.module.min.js": "threeModuleMinJs" ,
-        #"three.core.min.js": "threeCoreMinJs" 
+        "three.core.min.js": "threeCoreMinJs" 
     }
 
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
