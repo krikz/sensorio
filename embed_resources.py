@@ -10,7 +10,7 @@ def minify_html_content(content):
     return htmlmin.minify(content, remove_comments=True, remove_empty_space=True)
 
 def minify_js_content(content):
-    return jsmin(content)
+    return content
 
 def minify_css_content(content):
     return csscompressor.compress(content)

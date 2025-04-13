@@ -124,7 +124,8 @@ const struct Resource
     {"/favicon.ico", faviconIco, faviconIco_len, "image/x-icon"},
     {"/styles.css", stylesCss, stylesCss_len, "text/css"},
     {"/three.module.min.js", threeModuleMinJs, threeModuleMinJs_len, "application/javascript"},
-    {"/three.core.min.js", threeCoreMinJs, threeCoreMinJs_len, "application/javascript"}};
+    {"/three.core.min.js", threeCoreMinJs, threeCoreMinJs_len, "application/javascript"}
+};
 // Настройка HTTP-сервера
 void setupHTTPServer()
 {
@@ -134,7 +135,7 @@ void setupHTTPServer()
     server.on(Uri(resource.path), HTTP_GET, [resource]()
               { server.send_P(200, resource.contentType, reinterpret_cast<const char *>(resource.data), resource.length); });
   }
-  server.on("/", []()
+  server.on("/data", []()
             {
       String response = "{";
       for (int i = 0; i < 10; i++)

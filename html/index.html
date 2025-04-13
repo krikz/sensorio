@@ -27,8 +27,9 @@
 
     <script type="module">
       import * as THREE from "three";
-      let socket;
+
       let isStreaming = false;
+      let intervalId;
 
       // Three.js setup
       const scene = new THREE.Scene();
@@ -71,48 +72,41 @@
       }
       animate();
 
-      // WebSocket logic
+      // Function to fetch data periodically
+      async function fetchData() {
+        try {
+          const response = await fetch("/data");
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          const data = await response.json();
+
+          // Update bone orientation based on gyroscope data
+          for (const [key, device] of Object.entries(data)) {
+            const id = parseInt(key.slice(1), 10); // Extract ID from key (e.g., "d0" -> 0)
+            if (id < bones.length) {
+              bones[id].rotation.x += device.gx * 0.01;
+              bones[id].rotation.y += device.gy * 0.01;
+              bones[id].rotation.z += device.gz * 0.01;
+            }
+          }
+        } catch (error) {
+          console.error("Error fetching data:", error);
+        }
+      }
+
+      // Start or stop streaming
       function toggleStream() {
         const button = document.getElementById("streamButton");
         if (!isStreaming) {
           fetch("/start").then(() => {
-            socket = new WebSocket(`ws://${window.location.host}/ws`);
-            socket.binaryType = "arraybuffer";
-            socket.onmessage = (event) => {
-              const buffer = event.data;
-              const view = new DataView(buffer);
-
-              const id = view.getUint8(0);
-              const time = view.getUint32(1, true); // Little-endian
-              const accel_x = view.getFloat32(5, true);
-              const accel_y = view.getFloat32(9, true);
-              const accel_z = view.getFloat32(13, true);
-              const gyro_x = view.getFloat32(17, true);
-              const gyro_y = view.getFloat32(21, true);
-              const gyro_z = view.getFloat32(25, true);
-
-              // Update bone orientation based on gyroscope data
-              if (id < bones.length) {
-                bones[id].rotation.x += gyro_x * 0.01;
-                bones[id].rotation.y += gyro_y * 0.01;
-                bones[id].rotation.z += gyro_z * 0.01;
-              }
-            };
-            socket.onopen = () => {
-              console.log("WebSocket connection opened");
-              isStreaming = true;
-              button.textContent = "Stop Streaming";
-            };
-            socket.onclose = () => {
-              console.log("WebSocket connection closed");
-            };
+            intervalId = setInterval(fetchData, 100); // Fetch data every 100ms
+            isStreaming = true;
+            button.textContent = "Stop Streaming";
           });
         } else {
           fetch("/stop").then(() => {
-            if (socket) {
-              socket.close();
-              socket = null;
-            }
+            clearInterval(intervalId);
             isStreaming = false;
             button.textContent = "Start Streaming";
           });
