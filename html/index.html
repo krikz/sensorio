@@ -57,82 +57,94 @@
 
       camera.position.set(0, 0, 10); // Position the camera to see the entire skeleton
 
-      // Описание костей
+      // Описание костей с иерархией через parentBone
       const bonesConfig = [
         {
           id: 0, // ID первой кости
-          size: { length: 1, width: 0.1, height: 0.1 }, // Размеры кости
+          length: 1, // Длина кости
           deviceId: 0, // Номер устройства, привязанного к этой кости
           axisMapping: {
             x: "gx", // Вектор gx устройства проецируется на ось X кости
             y: "gy", // Вектор gy устройства проецируется на ось Y кости
             z: "gz", // Вектор gz устройства проецируется на ось Z кости
           },
+          initialPosition: { x: 0, y: 0, z: 0 }, // Начальное положение кости
+          color: 0xff0000, // Цвет кости (красный)
+          parentBone: null, // Эта кость является корневой
         },
         {
           id: 1, // ID второй кости
-          size: { length: 1, width: 0.1, height: 0.1 },
+          length: 1,
           deviceId: 1,
           axisMapping: {
             x: "gx",
             y: "gy",
             z: "gz",
           },
+          initialPosition: { x: 0, y: -1, z: 0 }, // Начальное положение кости
+          color: 0x00ff00, // Цвет кости (зеленый)
+          parentBone: 0, // Родительская кость (ID: 0)
         },
         {
           id: 2, // ID третьей кости
-          size: { length: 1, width: 0.1, height: 0.1 },
+          length: 1,
           deviceId: 2,
           axisMapping: {
             x: "gx",
             y: "gy",
             z: "gz",
           },
+          initialPosition: { x: 0, y: -2, z: 0 }, // Начальное положение кости
+          color: 0x0000ff, // Цвет кости (синий)
+          parentBone: 1, // Родительская кость (ID: 1)
         },
       ];
 
-      // Описание связей между костями
-      const boneConnections = [
-        {
-          parentBoneId: 0, // Первая кость
-          childBoneId: 1, // Вторая кость
-          jointPosition: new THREE.Vector3(1, 0, 0), // Точка соединения относительно первой кости
-        },
-        {
-          parentBoneId: 1, // Вторая кость
-          childBoneId: 2, // Третья кость
-          jointPosition: new THREE.Vector3(1, 0, 0), // Точка соединения относительно второй кости
-        },
-      ];
-
-      // Create bones based on configuration
+      // Создаем кости
       const bones = [];
       bonesConfig.forEach((boneConfig) => {
-        const geometry = new THREE.BoxGeometry(
-          boneConfig.size.length,
-          boneConfig.size.width,
-          boneConfig.size.height
+        const bone = new THREE.Bone();
+        bone.position.set(
+          boneConfig.initialPosition.x,
+          boneConfig.initialPosition.y,
+          boneConfig.initialPosition.z
         );
-
-        // Translate geometry so that the start of the bone is at the origin
-        geometry.translate(-boneConfig.size.length / 2, 0, 0);
-
-        const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
-        const bone = new THREE.Mesh(geometry, material);
-        bone.position.set(0, 0, 0); // Initial position
-        scene.add(bone);
         bones[boneConfig.id] = bone;
       });
 
-      // Link bones together based on connections
-      boneConnections.forEach((connection) => {
-        const parentBone = bones[connection.parentBoneId];
-        const childBone = bones[connection.childBoneId];
+      // Связываем кости в иерархию на основе parentBone
+      bonesConfig.forEach((boneConfig) => {
+        if (boneConfig.parentBone !== null) {
+          const parentBone = bones[boneConfig.parentBone];
+          const childBone = bones[boneConfig.id];
+          parentBone.add(childBone);
+        }
+      });
 
-        // Set the child bone's position relative to the parent bone
-        childBone.position.copy(
-          parentBone.localToWorld(connection.jointPosition)
+      // Создаем скелет
+      const skeleton = new THREE.Skeleton(bones);
+
+      // Создаем визуальное представление костей
+      const meshBones = [];
+      bonesConfig.forEach((boneConfig, index) => {
+        const geometry = new THREE.BoxGeometry(boneConfig.length, 0.1, 0.1);
+        geometry.translate(-boneConfig.length / 2, 0, 0); // Смещаем геометрию к началу кости
+
+        const material = new THREE.MeshBasicMaterial({
+          color: boneConfig.color,
+        });
+        const meshBone = new THREE.Mesh(geometry, material);
+
+        // Привязываем визуальную кость к соответствующей кости скелета
+        meshBone.bind(skeleton);
+        meshBone.position.set(
+          boneConfig.initialPosition.x,
+          boneConfig.initialPosition.y,
+          boneConfig.initialPosition.z
         );
+
+        scene.add(meshBone);
+        meshBones.push(meshBone);
       });
 
       // Animation loop
@@ -153,10 +165,10 @@
           const data = await response.json();
 
           // Update bone orientations based on gyroscope data
-          bonesConfig.forEach((boneConfig) => {
+          bonesConfig.forEach((boneConfig, index) => {
             const deviceData = data[`d${boneConfig.deviceId}`];
-            if (deviceData) {
-              const bone = bones[boneConfig.id];
+            if (deviceData && bones[index]) {
+              const bone = bones[index];
 
               // Map device vectors to bone axes
               const rotationX = deviceData[boneConfig.axisMapping.x];
@@ -168,17 +180,8 @@
             }
           });
 
-          // Update positions of connected bones
-          boneConnections.forEach((connection) => {
-            const parentBone = bones[connection.parentBoneId];
-            const childBone = bones[connection.childBoneId];
-
-            // Update the child bone's position based on the parent bone's orientation
-            const nextBonePosition = parentBone.localToWorld(
-              connection.jointPosition.clone()
-            );
-            childBone.position.copy(nextBonePosition);
-          });
+          // Update the skeleton's pose
+          skeleton.calculateInverses();
         } catch (error) {
           console.error("Error fetching data:", error);
         }

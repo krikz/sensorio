@@ -19,9 +19,16 @@ struct MacHash
     return hash;
   }
 };
+struct UInt32Hash
+{
+  uint32_t operator()(uint32_t key) const
+  {
+    return key; // Возвращаем ключ как есть
+  }
+};
 
 // Определяем хеш-таблицу для MAC-адресов
-Hashtable<const uint8_t *, uint8_t, MacHash> macToIdx;
+Hashtable<uint32_t, uint8_t, UInt32Hash> macToIdx;
 uint8_t macAP[6];
 
 // Глобальные переменные
@@ -31,7 +38,7 @@ SensorData receivedData[10];
 WebServer server(80);
 
 // Функция регистрации устройств
-void registerDevice(const uint8_t *mac)
+void registerDevice(uint32_t macHash)
 {
   static uint8_t nextID = 1;
   if (nextID >= 10)
@@ -41,17 +48,10 @@ void registerDevice(const uint8_t *mac)
   }
 
   uint8_t assignedID = nextID++;
-  Serial.printf("Assigned ID %d to device with MAC: ", assignedID);
-  for (int i = 0; i < 6; i++)
-  {
-    Serial.print(mac[i], HEX);
-    if (i < 5)
-      Serial.print(":");
-  }
-  Serial.println();
+  Serial.printf("Assigned ID %d to device with MAC hash: %u\n", assignedID, macHash);
 
-  // Добавляем MAC-адрес в хеш-таблицу
-  macToIdx.put(mac, assignedID);
+  // Добавляем хеш MAC-адреса в хеш-таблицу
+  macToIdx.put(macHash, assignedID);
 }
 
 // Callback для приема данных через ESP-NOW
@@ -62,20 +62,25 @@ void onDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len)
     SensorData data;
     memcpy(&data, incomingData, sizeof(SensorData));
 
+    // Вычисляем хеш MAC-адреса
+    MacHash hasher;
+    uint32_t macHash = hasher(mac);
+
     // Проверяем, зарегистрирован ли MAC-адрес
-    uint8_t *value = macToIdx.get(mac);
+    uint8_t *value = macToIdx.get(macHash);
+
     if (value == nullptr)
     {
       // Если MAC-адрес не зарегистрирован, регистрируем устройство
-      registerDevice(mac);
+      registerDevice(macHash);
     }
     else
     {
+      //Serial.printf("ID %d to device with MAC hash: %u\n", value, macHash);
       // Если MAC-адрес зарегистрирован, сохраняем данные
       data.id = *value;
       data.time = micros();
       receivedData[*value] = data;
-      Serial.printf("Data received from device ID %d\n", *value);
     }
   }
 }
@@ -125,8 +130,7 @@ const struct Resource
     {"/styles.css", stylesCss, stylesCss_len, "text/css"},
     {"/three.module.min.js", threeModuleMinJs, threeModuleMinJs_len, "application/javascript"},
     {"/three.core.min.js", threeCoreMinJs, threeCoreMinJs_len, "application/javascript"},
-    {"/OrbitControls.min.js", OrbitControlsMinJs, OrbitControlsMinJs_len, "application/javascript"}
-};
+    {"/OrbitControls.min.js", OrbitControlsMinJs, OrbitControlsMinJs_len, "application/javascript"}};
 // Настройка HTTP-сервера
 void setupHTTPServer()
 {
