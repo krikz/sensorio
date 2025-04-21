@@ -124,7 +124,8 @@ const struct Resource
     {"/favicon.ico", faviconIco, faviconIco_len, "image/x-icon"},
     {"/styles.css", stylesCss, stylesCss_len, "text/css"},
     {"/three.module.min.js", threeModuleMinJs, threeModuleMinJs_len, "application/javascript"},
-    {"/three.core.min.js", threeCoreMinJs, threeCoreMinJs_len, "application/javascript"}
+    {"/three.core.min.js", threeCoreMinJs, threeCoreMinJs_len, "application/javascript"},
+    {"/OrbitControls.min.js", OrbitControlsMinJs, OrbitControlsMinJs_len, "application/javascript"}
 };
 // Настройка HTTP-сервера
 void setupHTTPServer()
