@@ -55,35 +55,85 @@
       controls.maxDistance = 20;
       controls.target.set(0, 0, 0); // Center of the skeleton
 
-      // Create bones
-      const boneLength = 1;
+      camera.position.set(0, 0, 10); // Position the camera to see the entire skeleton
+
+      // Описание костей
+      const bonesConfig = [
+        {
+          id: 0, // ID первой кости
+          size: { length: 1, width: 0.1, height: 0.1 }, // Размеры кости
+          deviceId: 0, // Номер устройства, привязанного к этой кости
+          axisMapping: {
+            x: "gx", // Вектор gx устройства проецируется на ось X кости
+            y: "gy", // Вектор gy устройства проецируется на ось Y кости
+            z: "gz", // Вектор gz устройства проецируется на ось Z кости
+          },
+        },
+        {
+          id: 1, // ID второй кости
+          size: { length: 1, width: 0.1, height: 0.1 },
+          deviceId: 1,
+          axisMapping: {
+            x: "gx",
+            y: "gy",
+            z: "gz",
+          },
+        },
+        {
+          id: 2, // ID третьей кости
+          size: { length: 1, width: 0.1, height: 0.1 },
+          deviceId: 2,
+          axisMapping: {
+            x: "gx",
+            y: "gy",
+            z: "gz",
+          },
+        },
+      ];
+
+      // Описание связей между костями
+      const boneConnections = [
+        {
+          parentBoneId: 0, // Первая кость
+          childBoneId: 1, // Вторая кость
+          jointPosition: new THREE.Vector3(1, 0, 0), // Точка соединения относительно первой кости
+        },
+        {
+          parentBoneId: 1, // Вторая кость
+          childBoneId: 2, // Третья кость
+          jointPosition: new THREE.Vector3(1, 0, 0), // Точка соединения относительно второй кости
+        },
+      ];
+
+      // Create bones based on configuration
       const bones = [];
-      const jointPositions = []; // To store positions of joints
+      bonesConfig.forEach((boneConfig) => {
+        const geometry = new THREE.BoxGeometry(
+          boneConfig.size.length,
+          boneConfig.size.width,
+          boneConfig.size.height
+        );
 
-      function createBone(x, y, z) {
-        const geometry = new THREE.BoxGeometry(boneLength, 0.1, 0.1);
-
-        // Смещаем геометрию так, чтобы начало кости было в начале координат
-        geometry.translate(-boneLength / 2, 0, 0);
+        // Translate geometry so that the start of the bone is at the origin
+        geometry.translate(-boneConfig.size.length / 2, 0, 0);
 
         const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
         const bone = new THREE.Mesh(geometry, material);
-        bone.position.set(x, y, z);
+        bone.position.set(0, 0, 0); // Initial position
         scene.add(bone);
-        return bone;
-      }
+        bones[boneConfig.id] = bone;
+      });
 
-      // Create three connected bones
-      bones.push(createBone(0, 0, 0)); // First bone starts at origin
-      jointPositions.push(new THREE.Vector3(0, 0, 0));
+      // Link bones together based on connections
+      boneConnections.forEach((connection) => {
+        const parentBone = bones[connection.parentBoneId];
+        const childBone = bones[connection.childBoneId];
 
-      bones.push(createBone(0, -boneLength, 0)); // Second bone starts at the end of the first
-      jointPositions.push(new THREE.Vector3(0, -boneLength, 0));
-
-      bones.push(createBone(0, -2 * boneLength, 0)); // Third bone starts at the end of the second
-      jointPositions.push(new THREE.Vector3(0, -2 * boneLength, 0));
-
-      camera.position.set(0, 0, 10); // Position the camera to see the entire skeleton
+        // Set the child bone's position relative to the parent bone
+        childBone.position.copy(
+          parentBone.localToWorld(connection.jointPosition)
+        );
+      });
 
       // Animation loop
       function animate() {
@@ -103,26 +153,32 @@
           const data = await response.json();
 
           // Update bone orientations based on gyroscope data
-          for (const [key, device] of Object.entries(data)) {
-            const id = parseInt(key.slice(1), 10); // Extract ID from key (e.g., "d0" -> 0)
-            if (id < bones.length) {
-              // Convert gyro data to radians for rotation
-              const rotationX = device.gx;
-              const rotationY = device.gy;
-              const rotationZ = device.gz;
+          bonesConfig.forEach((boneConfig) => {
+            const deviceData = data[`d${boneConfig.deviceId}`];
+            if (deviceData) {
+              const bone = bones[boneConfig.id];
+
+              // Map device vectors to bone axes
+              const rotationX = deviceData[boneConfig.axisMapping.x];
+              const rotationY = deviceData[boneConfig.axisMapping.y];
+              const rotationZ = deviceData[boneConfig.axisMapping.z];
 
               // Apply rotation to the bone
-              bones[id].rotation.set(rotationX, rotationY, rotationZ);
-
-              // Update the position of the next bone's starting point
-              if (id < bones.length - 1) {
-                const nextBonePosition = bones[id].localToWorld(
-                  new THREE.Vector3(-boneLength, 0, 0)
-                );
-                bones[id + 1].position.copy(nextBonePosition);
-              }
+              bone.rotation.set(rotationX, rotationY, rotationZ);
             }
-          }
+          });
+
+          // Update positions of connected bones
+          boneConnections.forEach((connection) => {
+            const parentBone = bones[connection.parentBoneId];
+            const childBone = bones[connection.childBoneId];
+
+            // Update the child bone's position based on the parent bone's orientation
+            const nextBonePosition = parentBone.localToWorld(
+              connection.jointPosition.clone()
+            );
+            childBone.position.copy(nextBonePosition);
+          });
         } catch (error) {
           console.error("Error fetching data:", error);
         }
