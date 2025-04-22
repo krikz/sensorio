@@ -14,7 +14,6 @@
     </header>
     <main>
       <button id="streamButton">Start Streaming</button>
-      <div id="canvas-container"></div>
     </main>
     <script type="importmap">
       {
@@ -35,16 +34,14 @@
       // Three.js setup
       const scene = new THREE.Scene();
       const camera = new THREE.PerspectiveCamera(
-        75,
+        45,
         window.innerWidth / window.innerHeight,
         0.1,
         1000
       );
       const renderer = new THREE.WebGLRenderer({ antialias: true });
       renderer.setSize(window.innerWidth, window.innerHeight);
-      document
-        .getElementById("canvas-container")
-        .appendChild(renderer.domElement);
+      document.body.appendChild(renderer.domElement);
 
       // Add OrbitControls for camera rotation
       const controls = new OrbitControls(camera, renderer.domElement);
@@ -61,7 +58,7 @@
       const bonesConfig = [
         {
           id: 0, // ID первой кости
-          length: 1, // Длина кости
+          length: 3.5, // Длина кости
           deviceId: 0, // Номер устройства, привязанного к этой кости
           axisMapping: {
             x: "gx", // Вектор gx устройства проецируется на ось X кости
@@ -74,14 +71,14 @@
         },
         {
           id: 1, // ID второй кости
-          length: 1,
+          length: 3.57,
           deviceId: 1,
           axisMapping: {
             x: "gx",
             y: "gy",
             z: "gz",
           },
-          initialPosition: { x: 0, y: -1, z: 0 }, // Начальное положение кости
+          initialPosition: { x: 0, y: -3.5, z: 0 }, // Начальное положение кости
           color: 0x00ff00, // Цвет кости (зеленый)
           parentBone: 0, // Родительская кость (ID: 0)
         },
@@ -94,7 +91,7 @@
             y: "gy",
             z: "gz",
           },
-          initialPosition: { x: 0, y: -2, z: 0 }, // Начальное положение кости
+          initialPosition: { x: 0, y: -3.57, z: 0 }, // Начальное положение кости
           color: 0x0000ff, // Цвет кости (синий)
           parentBone: 1, // Родительская кость (ID: 1)
         },
@@ -124,27 +121,37 @@
       // Создаем скелет
       const skeleton = new THREE.Skeleton(bones);
 
-      // Создаем визуальное представление костей
-      const meshBones = [];
-      bonesConfig.forEach((boneConfig, index) => {
-        const geometry = new THREE.BoxGeometry(boneConfig.length, 0.1, 0.1);
-        geometry.translate(-boneConfig.length / 2, 0, 0); // Смещаем геометрию к началу кости
+      // Создаем визуальное представление костей и суставов
+      const boneMeshes = [];
+      const jointMeshes = [];
 
-        const material = new THREE.MeshBasicMaterial({
+      bonesConfig.forEach((boneConfig, index) => {
+        const boneLength = boneConfig.length;
+
+        // Создаем цилиндр для кости
+        const boneGeometry = new THREE.CylinderGeometry(
+          0.1,
+          0.1,
+          boneLength,
+          8
+        );
+        boneGeometry.translate(0, -boneLength / 2, 0); // Смещаем геометрию к началу кости
+
+        const boneMaterial = new THREE.MeshBasicMaterial({
           color: boneConfig.color,
         });
-        const meshBone = new THREE.Mesh(geometry, material);
+        const boneMesh = new THREE.Mesh(boneGeometry, boneMaterial);
+        boneMeshes.push(boneMesh);
 
-        // Привязываем визуальную кость к соответствующей кости скелета
-        meshBone.bind(skeleton);
-        meshBone.position.set(
-          boneConfig.initialPosition.x,
-          boneConfig.initialPosition.y,
-          boneConfig.initialPosition.z
-        );
+        // Создаем сферу для сустава
+        const jointGeometry = new THREE.SphereGeometry(0.2, 16, 16);
+        const jointMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+        const jointMesh = new THREE.Mesh(jointGeometry, jointMaterial);
+        jointMeshes.push(jointMesh);
 
-        scene.add(meshBone);
-        meshBones.push(meshBone);
+        // Добавляем кость и сустав в сцену
+        scene.add(boneMesh);
+        scene.add(jointMesh);
       });
 
       // Animation loop
@@ -180,8 +187,20 @@
             }
           });
 
-          // Update the skeleton's pose
-          skeleton.calculateInverses();
+          // Update positions and orientations of visual elements
+          bones.forEach((bone, index) => {
+            const boneMesh = boneMeshes[index];
+            const jointMesh = jointMeshes[index];
+
+            // Update bone mesh position and orientation
+            boneMesh.position.copy(bone.getWorldPosition(new THREE.Vector3()));
+            boneMesh.quaternion.copy(
+              bone.getWorldQuaternion(new THREE.Quaternion())
+            );
+
+            // Update joint mesh position
+            jointMesh.position.copy(bone.getWorldPosition(new THREE.Vector3()));
+          });
         } catch (error) {
           console.error("Error fetching data:", error);
         }
@@ -209,6 +228,10 @@
       document
         .getElementById("streamButton")
         .addEventListener("click", toggleStream);
+
+      // Добавляем SkeletonHelper для визуализации скелета
+      const skeletonHelper = new THREE.SkeletonHelper(bones[0]);
+      scene.add(skeletonHelper);
     </script>
   </body>
 </html>
