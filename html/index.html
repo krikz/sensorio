@@ -25,6 +25,105 @@
     </script>
 
     <script type="module">
+      class MadgwickAHRS {
+        constructor(beta = 0.041) {
+          this.beta = beta; // Algorithm gain
+          this.q = { x: 0, y: 0, z: 0, w: 1 }; // Initial quaternion
+        }
+
+        update(gx, gy, gz, ax, ay, az, deltaTime) {
+          const q = this.q;
+
+          // Normalize accelerometer measurement
+          const norm = Math.sqrt(ax * ax + ay * ay + az * az);
+          if (norm === 0) return; // Handle invalid input
+          const recipNorm = 1 / norm;
+          ax *= recipNorm;
+          ay *= recipNorm;
+          az *= recipNorm;
+
+          // Gradient descent algorithm corrective step
+          const f = {
+            x: 2 * (q.x * q.z - q.w * q.y) - ax,
+            y: 2 * (q.w * q.x + q.y * q.z) - ay,
+            z: 2 * (0.5 - q.x * q.x - q.y * q.y) - az,
+          };
+
+          const j = {
+            xx: 2 * q.y,
+            xy: 2 * q.z,
+            xz: -2 * q.w,
+            yy: 2 * q.x,
+            yz: 2 * q.y,
+            zz: -4 * q.x,
+          };
+
+          const step = {
+            x: j.xx * f.x + j.xy * f.y + j.xz * f.z,
+            y: j.xy * f.x + j.yy * f.y + j.yz * f.z,
+            z: j.xz * f.x + j.yz * f.y + j.zz * f.z,
+            w: -j.xx * f.x - j.yy * f.y - j.zz * f.z,
+          };
+
+          const normStep = Math.sqrt(
+            step.x * step.x +
+              step.y * step.y +
+              step.z * step.z +
+              step.w * step.w
+          );
+          if (normStep === 0) return;
+          const recipNormStep = 1 / normStep;
+          step.x *= recipNormStep;
+          step.y *= recipNormStep;
+          step.z *= recipNormStep;
+          step.w *= recipNormStep;
+
+          // Apply feedback step
+          q.w += -this.beta * step.w;
+          q.x += -this.beta * step.x;
+          q.y += -this.beta * step.y;
+          q.z += -this.beta * step.z;
+
+          // Normalize quaternion
+          const normQ = Math.sqrt(
+            q.w * q.w + q.x * q.x + q.y * q.y + q.z * q.z
+          );
+          const recipNormQ = 1 / normQ;
+          q.w *= recipNormQ;
+          q.x *= recipNormQ;
+          q.y *= recipNormQ;
+          q.z *= recipNormQ;
+
+          // Integrate rate of change of quaternion
+          const halfDeltaT = 0.5 * deltaTime;
+          const qDot = {
+            w: -halfDeltaT * (gx * q.x + gy * q.y + gz * q.z),
+            x: halfDeltaT * (gx * q.w + gy * q.z - gz * q.y),
+            y: halfDeltaT * (-gx * q.z + gy * q.w + gz * q.x),
+            z: halfDeltaT * (gx * q.y - gy * q.x + gz * q.w),
+          };
+
+          q.w += qDot.w;
+          q.x += qDot.x;
+          q.y += qDot.y;
+          q.z += qDot.z;
+
+          // Normalize quaternion again
+          const normQFinal = Math.sqrt(
+            q.w * q.w + q.x * q.x + q.y * q.y + q.z * q.z
+          );
+          const recipNormQFinal = 1 / normQFinal;
+          q.w *= recipNormQFinal;
+          q.x *= recipNormQFinal;
+          q.y *= recipNormQFinal;
+          q.z *= recipNormQFinal;
+        }
+
+        getQuaternion() {
+          return this.q;
+        }
+      }
+
       import * as THREE from "three";
       import { OrbitControls } from "/OrbitControls.min.js";
 
@@ -163,6 +262,9 @@
       animate();
 
       // Function to fetch data periodically
+      // Initialize sensor fusion algorithm for each bone
+      const sensorFusionAlgorithms = bonesConfig.map(() => new MadgwickAHRS());
+
       async function fetchData() {
         try {
           const response = await fetch("/data");
@@ -171,19 +273,42 @@
           }
           const data = await response.json();
 
-          // Update bone orientations based on gyroscope data
+          // Update bone orientations based on sensor fusion
           bonesConfig.forEach((boneConfig, index) => {
             const deviceData = data[`d${boneConfig.deviceId}`];
             if (deviceData && bones[index]) {
               const bone = bones[index];
 
-              // Map device vectors to bone axes
-              const rotationX = deviceData[boneConfig.axisMapping.x];
-              const rotationY = deviceData[boneConfig.axisMapping.y];
-              const rotationZ = deviceData[boneConfig.axisMapping.z];
+              // Extract raw sensor data
+              const ax = deviceData.ax;
+              const ay = deviceData.ay;
+              const az = deviceData.az;
+              const gx = deviceData.gx;
+              const gy = deviceData.gy;
+              const gz = deviceData.gz;
 
-              // Apply rotation to the bone
-              bone.rotation.set(rotationX, rotationY, rotationZ);
+              // Update sensor fusion algorithm
+              const deltaTime = deviceData.dt / 1000; // Convert to seconds
+              sensorFusionAlgorithms[index].update(
+                gx,
+                gy,
+                gz,
+                ax,
+                ay,
+                az,
+                deltaTime
+              );
+
+              // Get orientation as a quaternion
+              const orientation = sensorFusionAlgorithms[index].getQuaternion();
+
+              // Apply quaternion to the bone
+              bone.quaternion.set(
+                orientation.x,
+                orientation.y,
+                orientation.z,
+                orientation.w
+              );
             }
           });
 
