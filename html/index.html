@@ -29,10 +29,24 @@
         constructor(beta = 0.041) {
           this.beta = beta; // Algorithm gain
           this.q = { x: 0, y: 0, z: 0, w: 1 }; // Initial quaternion
+          this.lastDt = null; // Initialize lastDt as null
         }
 
-        update(gx, gy, gz, ax, ay, az, deltaTime) {
+        update(gx, gy, gz, ax, ay, az, dt) {
           const q = this.q;
+
+          // Если это первый вызов, сохраняем текущее время и выходим
+          if (this.lastDt === null) {
+            this.lastDt = dt;
+            return;
+          }
+
+          // Вычисляем разницу во времени (в секундах)
+          const deltaTime = (dt - this.lastDt) / 1e6; // Преобразуем микросекунды в секунды
+          this.lastDt = dt; // Обновляем lastDt
+
+          // Проверяем, что deltaTime не равно нулю
+          if (deltaTime <= 0) return;
 
           // Normalize accelerometer measurement
           const norm = Math.sqrt(ax * ax + ay * ay + az * az);
@@ -263,6 +277,7 @@
 
       // Function to fetch data periodically
       // Initialize sensor fusion algorithm for each bone
+      // Initialize sensor fusion algorithm for each bone
       const sensorFusionAlgorithms = bonesConfig.map(() => new MadgwickAHRS());
 
       async function fetchData() {
@@ -286,18 +301,10 @@
               const gx = deviceData.gx;
               const gy = deviceData.gy;
               const gz = deviceData.gz;
+              const dt = deviceData.dt;
 
               // Update sensor fusion algorithm
-              const deltaTime = deviceData.dt / 1000; // Convert to seconds
-              sensorFusionAlgorithms[index].update(
-                gx,
-                gy,
-                gz,
-                ax,
-                ay,
-                az,
-                deltaTime
-              );
+              sensorFusionAlgorithms[index].update(gx, gy, gz, ax, ay, az, dt);
 
               // Get orientation as a quaternion
               const orientation = sensorFusionAlgorithms[index].getQuaternion();
